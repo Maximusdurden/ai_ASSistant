@@ -1,3 +1,5 @@
 /.env
 /agent_memory.db
 /venv
+pycache/
+__pycache__/
