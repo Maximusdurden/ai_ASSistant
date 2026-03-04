@@ -55,7 +55,7 @@ def extract_and_save_memory(response_text: str) -> str:
             # If valid content exists, save it to the database
             if content:
                 memory_manager.add_memory(category, content)
-                print(f"\n[SYSTEM: Saved new '{category}' memory to SQLite database]")
+                print(f"\n[SYSTEM: Saved new '{category}' memory to SQLite database (via JSON fallback)]")
                 
             # Strip the JSON block from the text, preserving text before and after it
             clean_text = response_text[:match.start()].strip() + "\n" + response_text[match.end():].strip()
@@ -67,6 +67,20 @@ def extract_and_save_memory(response_text: str) -> str:
     # Return the original text if no memory block was found or if parsing failed
     return response_text
 
+def create_memory(category: str, content: str) -> str:
+    """
+    Saves a permanent memory to the SQLite database. Use this tool whenever the user 
+    shares a fact, preference, or architectural detail that should be remembered permanently,
+    or when saving your own name.
+    
+    Args:
+        category: The category of the memory (e.g., 'agent_name', 'user_preference', 'project_context').
+        content: The specific detail or fact to remember.
+    """
+    memory_manager.add_memory(category, content)
+    print(f"\n[SYSTEM: Saved new '{category}' memory to SQLite database via Tool]")
+    return "Memory successfully saved."
+
 def main():
     print("Awakening AI Assistant... (Type 'quit' or 'exit' to stop)\n")
     
@@ -77,7 +91,8 @@ def main():
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
         temperature=0.7,
-        tools=[agent_tools.create_file],
+        # We now give the agent both the ability to create files AND formally create memories
+        tools=[agent_tools.create_file, create_memory],
     )
     
     # 3. Initialize the chat session
@@ -102,11 +117,19 @@ def main():
             # Send the message to the model
             response = chat.send_message(user_input)
             
-            # Intercept the response to check for database updates and clean the output
-            clean_text = extract_and_save_memory(response.text)
+            # Extract text safely (in case the response is purely a tool call without text)
+            try:
+                text_content = response.text
+            except ValueError:
+                text_content = ""
             
-            # Print the final cleaned response
-            print(f"\nAssistant: {clean_text}\n")
+            # Intercept the response to check for database updates and clean the output
+            if text_content:
+                clean_text = extract_and_save_memory(text_content)
+                print(f"\nAssistant: {clean_text}\n")
+            else:
+                print(f"\nAssistant: [Action Executed Successfully]\n")
+                
             print("-" * 40)
             
         except Exception as e:
