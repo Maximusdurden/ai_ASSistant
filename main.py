@@ -9,6 +9,7 @@ from google.genai import types
 
 # Import the SQLite manager (make sure you created memory_manager.py!)
 import memory_manager 
+import agent_tools
 
 # Load environment variables from .env file
 load_dotenv()
@@ -37,9 +38,12 @@ def load_soul() -> str:
 
 def extract_and_save_memory(response_text: str) -> str:
     """Parses the LLM response for a memory JSON block, saves it, and removes it from the output."""
-    # We use \x60 instead of literal backticks here to prevent UI truncation, 
-    # but it evaluates to the exact same regex search!
-    match = re.search(r'\x60\x60\x60json\n({\s*"action":\s*"save_memory".*?})\n\x60\x60\x60', response_text, re.DOTALL)
+    # Create the triple backticks dynamically to prevent the UI editor from cutting off the code
+    ticks = '`' * 3
+    
+    # Use an f-string to inject the ticks into the regex pattern safely
+    pattern = rf'{ticks}json\n({{\s*"action":\s*"save_memory".*?}})\n{ticks}'
+    match = re.search(pattern, response_text, re.DOTALL)
     
     if match:
         try:
@@ -69,10 +73,11 @@ def main():
     # 1. Load the essence (Soul + Memories)
     system_prompt = load_soul()
     
-    # 2. Configure the model with your system instructions
+    # 2. Configure the model with your system instructions AND tools
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
         temperature=0.7,
+        tools=[agent_tools.create_file],
     )
     
     # 3. Initialize the chat session
