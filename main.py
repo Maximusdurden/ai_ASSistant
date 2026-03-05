@@ -6,8 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse  # <-- Add this!
+from pydantic import BaseModel
+import uvicorn
+from contextlib import asynccontextmanager
 
-# Import the SQLite manager (make sure you created memory_manager.py!)
 import memory_manager 
 import agent_tools
 
@@ -26,11 +31,7 @@ def load_soul() -> str:
     soul_path = Path("your_essence/SOUL.md")
     try:
         base_prompt = soul_path.read_text(encoding="utf-8")
-        
-        # Inject the SQLite memories into the system prompt dynamically
         saved_memories = memory_manager.get_all_memories()
-        
-        # Combine the soul with the memories
         return f"{base_prompt}\n\n{saved_memories}"
     except FileNotFoundError:
         print(f"Error: Could not find {soul_path}. Please ensure the file exists.")
@@ -38,33 +39,26 @@ def load_soul() -> str:
 
 def extract_and_save_memory(response_text: str) -> str:
     """Parses the LLM response for a memory JSON block, saves it, and removes it from the output."""
-    # Create the triple backticks dynamically to prevent the UI editor from cutting off the code
     ticks = '`' * 3
-    
-    # Use an f-string to inject the ticks into the regex pattern safely
     pattern = rf'{ticks}json\n({{\s*"action":\s*"save_memory".*?}})\n{ticks}'
     match = re.search(pattern, response_text, re.DOTALL)
     
     if match:
         try:
-            # Parse the JSON string into a Python dictionary
             memory_data = json.loads(match.group(1))
             category = memory_data.get("category", "general")
             content = memory_data.get("content", "")
             
-            # If valid content exists, save it to the database
             if content:
                 memory_manager.add_memory(category, content)
                 print(f"\n[SYSTEM: Saved new '{category}' memory to SQLite database (via JSON fallback)]")
                 
-            # Strip the JSON block from the text, preserving text before and after it
             clean_text = response_text[:match.start()].strip() + "\n" + response_text[match.end():].strip()
             return clean_text.strip()
             
         except json.JSONDecodeError:
             print("\n[SYSTEM: Agent attempted to save a memory, but the JSON was malformed.]")
             
-    # Return the original text if no memory block was found or if parsing failed
     return response_text
 
 def create_memory(category: str, content: str) -> str:
@@ -81,59 +75,90 @@ def create_memory(category: str, content: str) -> str:
     print(f"\n[SYSTEM: Saved new '{category}' memory to SQLite database via Tool]")
     return "Memory successfully saved."
 
-def main():
-    print("Awakening AI Assistant... (Type 'quit' or 'exit' to stop)\n")
+# --- FastAPI Server Setup ---
+
+# Define the expected incoming JSON payload
+class ChatRequest(BaseModel):
+    message: str
+
+# Global variable to hold Cortex's active chat session
+cortex_session = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- This block runs on startup ---
+    global cortex_session
+    print("Awakening Cortex server...")
     
-    # 1. Load the essence (Soul + Memories)
     system_prompt = load_soul()
     
-    # 2. Configure the model with your system instructions AND tools
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
         temperature=0.7,
-        # We now give the agent both the ability to create files AND formally create memories
-        tools=[agent_tools.create_file, create_memory],
+        tools=[
+            agent_tools.create_file, 
+            create_memory, 
+            agent_tools.read_reddit_post_comments, 
+            agent_tools.read_subreddit_top_posts,
+            agent_tools.read_file  # <-- Add the new tool here!
+        ],
     )
     
-    # 3. Initialize the chat session
-    chat = client.chats.create(model="gemini-2.5-flash", config=config)
+    cortex_session = client.chats.create(model="gemini-2.5-flash", config=config)
+    print("Cortex is online and listening at http://localhost:8000")
     
-    # 4. Start the chat loop
-    while True:
-        try:
-            user_input = input("You: ")
-        except (KeyboardInterrupt, EOFError):
-            print("\nShutting down...")
-            break
-            
-        if user_input.lower() in ['quit', 'exit']:
-            print("Shutting down...")
-            break
-            
-        if not user_input.strip():
-            continue
+    yield  # The server runs here
+    
+    # --- This block runs on shutdown ---
+    print("\nShutting down Cortex server...")
+
+# Initialize the app with the lifespan manager
+app = FastAPI(lifespan=lifespan)
+
+# Enable CORS so your local index.html can talk to this server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+async def serve_chat_ui():
+    """Serves the chat interface when you visit http://localhost:8000"""
+    ui_path = Path("chat_app/index.html")
+    if not ui_path.exists():
+        return {"error": "Could not find chat_app/index.html. Make sure the file exists!"}
+    return FileResponse(ui_path)
+
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    if not cortex_session:
+        raise HTTPException(status_code=500, detail="Cortex brain not initialized.")
+    
+    try:
+        print(f"\nUser: {request.message}")
+        response = cortex_session.send_message(request.message)
         
         try:
-            # Send the message to the model
-            response = chat.send_message(user_input)
+            text_content = response.text
+        except ValueError:
+            text_content = ""
+        
+        if text_content:
+            clean_text = extract_and_save_memory(text_content)
+            print(f"Assistant: {clean_text}\n")
+        else:
+            clean_text = "[Action Executed Successfully]"
+            print(f"Assistant: {clean_text}\n")
             
-            # Extract text safely (in case the response is purely a tool call without text)
-            try:
-                text_content = response.text
-            except ValueError:
-                text_content = ""
-            
-            # Intercept the response to check for database updates and clean the output
-            if text_content:
-                clean_text = extract_and_save_memory(text_content)
-                print(f"\nAssistant: {clean_text}\n")
-            else:
-                print(f"\nAssistant: [Action Executed Successfully]\n")
-                
-            print("-" * 40)
-            
-        except Exception as e:
-            print(f"\nAn error occurred: {e}\n")
+        return {"response": clean_text}
+        
+    except Exception as e:
+        print(f"\nAn error occurred: {e}\n")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    main()
+    # Start the server on port 8000
+    uvicorn.run(app, host="127.0.0.1", port=8000)

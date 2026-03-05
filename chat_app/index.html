@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex Chat Interface</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #chat-container {
+            width: 600px;
+            height: 80vh;
+            background-color: #252526;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-log {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 5px;
+            line-height: 1.5;
+        }
+        .user-message {
+            background-color: #0e639c;
+            color: white;
+            align-self: flex-end;
+        }
+        .cortex-message {
+            background-color: #333333;
+            color: #d4d4d4;
+            align-self: flex-start;
+        }
+        #input-area {
+            display: flex;
+            padding: 15px;
+            background-color: #2d2d30;
+            border-top: 1px solid #3e3e42;
+        }
+        #user-input {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: #3c3c3c;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            outline: none;
+            font-size: 16px;
+        }
+        #send-btn {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 0 20px;
+            margin-left: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #send-btn:hover {
+            background-color: #1177bb;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <div id="chat-log">
+        <div class="message cortex-message">System: Cortex is online. How can I help you today?</div>
+    </div>
+    <div id="input-area">
+        <input type="text" id="user-input" placeholder="Type your message to Cortex..." autocomplete="off" />
+        <button id="send-btn">Send</button>
+    </div>
+</div>
+
+<script>
+    const chatLog = document.getElementById('chat-log');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    // Function to add a message to the chat window
+    function appendMessage(text, sender) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message');
+        msgDiv.classList.add(sender === 'user' ? 'user-message' : 'cortex-message');
+        
+        // Convert basic line breaks to HTML breaks for formatting
+        msgDiv.innerHTML = text.replace(/\n/g, '<br>');
+        
+        chatLog.appendChild(msgDiv);
+        chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll to bottom
+    }
+
+    // Function to send message to the FastAPI backend
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        // Display user message instantly
+        appendMessage(text, 'user');
+        userInput.value = '';
+
+        try {
+            // Call the Cortex backend running on port 8000
+            const response = await fetch('http://localhost:8000/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message: text })
+            });
+
+            if (!response.ok) throw new Error("Server error");
+
+            const data = await response.json();
+            
+            // Display Cortex's response
+            appendMessage(data.response, 'cortex');
+
+        } catch (error) {
+            appendMessage("Error: Could not connect to Cortex. Make sure main.py is running.", 'cortex');
+            console.error(error);
+        }
+    }
+
+    // Event listeners for clicking "Send" or pressing Enter
+    sendBtn.addEventListener('click', sendMessage);
+    userInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+</script>
+
+</body>
+</html>
