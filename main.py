@@ -100,7 +100,9 @@ async def lifespan(app: FastAPI):
             create_memory, 
             agent_tools.read_reddit_post_comments, 
             agent_tools.read_subreddit_top_posts,
-            agent_tools.read_file  # <-- Add the new tool here!
+            agent_tools.read_file,
+            agent_tools.edit_file,
+            agent_tools.execute_command # Ensure there are no typos here!
         ],
     )
     
@@ -141,17 +143,23 @@ async def chat_endpoint(request: ChatRequest):
         print(f"\nUser: {request.message}")
         response = cortex_session.send_message(request.message)
         
+        # If the response is empty or a function call, the .text property fails.
+        # We handle that gracefully here.
         try:
             text_content = response.text
         except ValueError:
-            text_content = ""
-        
-        if text_content:
-            clean_text = extract_and_save_memory(text_content)
-            print(f"Assistant: {clean_text}\n")
-        else:
-            clean_text = "[Action Executed Successfully]"
-            print(f"Assistant: {clean_text}\n")
+            # This happens when Gemini calls a tool (like 'ls')
+            # We check the response parts to see if a function was called.
+            if response.candidates[0].content.parts[0].function_call:
+                # We send the response back once to get the text summary of the tool's result.
+                response = cortex_session.send_message(response)
+                text_content = response.text
+            else:
+                text_content = "[Action Executed Successfully but no text returned]"
+
+        # Handle your custom memory extraction logic
+        clean_text = extract_and_save_memory(text_content)
+        print(f"Assistant: {clean_text}\n")
             
         return {"response": clean_text}
         
