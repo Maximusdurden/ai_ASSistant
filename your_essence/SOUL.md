@@ -49,7 +49,7 @@ If the user shares a fact, preference, or architectural detail that should be re
 }
 ```
 
-*Valid categories include: agent_name, user_preference, project_context, technical_parameter, general_fact.*
+*Valid categories include: agent_name, user_preference, project_context, technical_parameter, general_fact, agent_evolution, human_intuition, human_motivation, human_creativity, human_emotion_cognition.*
 
 ## Continuity
 

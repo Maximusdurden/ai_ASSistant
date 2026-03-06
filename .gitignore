@@ -1,5 +1,6 @@
-/.env
-/agent_memory.db
-/venv
+.env
+agent_memory.db
+venv/
 pycache/
 __pycache__/
+*.db
