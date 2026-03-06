@@ -1,132 +1,80 @@
-# Personal AI Assistant (`ai_ASSistant`)
+# Personal AI Assistant (ai_ASSistant)
 
-A locally hosted, personalized AI assistant built with **Python** and the **Google Gemini API**. This assistant features a persistent, self-editing memory system using **SQLite** and a customizable personality core ("Soul").
+A locally hosted, personalized AI assistant built with Python, FastAPI, and the Google Gemini API. This assistant features a custom web-based chat interface, a persistent self-editing memory system using SQLite, custom tool execution, and is fully containerized using Docker.
 
----
+## Features
 
-## 🚀 Features
+* **Custom Persona ("Soul"):** Behavior and rules are defined in a localized Markdown file.
+* **Persistent Memory:** The agent uses SQLite to save facts, preferences, and project details across sessions.
+* **Web Interface:** A clean, responsive HTML/JS frontend served directly from the FastAPI backend.
+* **Custom Tooling:** Equipped with Python-based tools allowing the AI to interact with the local file system (read/create files) and scrape external sources like Reddit.
+* **Dockerized:** Fully containerized for seamless setup, ensuring the core Python environment and dependencies remain isolated.
 
-### 🧠 Custom Persona ("Soul")
-
-Behavior and rules are defined in a localized Markdown file.
-
-### 💾 Persistent Memory
-
-The agent uses SQLite to save facts, preferences, and project details across sessions.
-
-### ✨ Self-Naming (The Awakening Directive)
-
-On its first boot, the agent will invent a name for itself and commit it to memory permanently.
-
-### 🔒 Isolated Environment
-
-Built cleanly with Python virtual environments (`venv`) and environment variables.
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 Before you begin, your project folder should look like this:
 
-```bash
-ai_ASSistant/
-├── .env
-├── main.py
-├── memory_manager.py
-└── your_essence/
-    └── SOUL.md
-```
+    ai_ASSistant/
+    ├── .env
+    ├── .gitignore
+    ├── .dockerignore
+    ├── Dockerfile
+    ├── requirements.txt
+    ├── main.py
+    ├── memory_manager.py
+    ├── agent_tools.py
+    ├── chat_app/
+    │   └── index.html
+    └── your_essence/
+        └── SOUL.md
 
-> **Note:** The `agent_memory.db` file and `venv/` folder will be generated automatically during setup.
+## Setup Instructions
 
----
+### 1. Configure Environment Variables
 
-# 🛠 Setup Instructions
+Create a file named `.env` in the root of your project directory and add your Gemini API key exactly as shown below, ensuring there are no spaces or quotes:
 
-## 1️⃣ Create the Virtual Environment
+    GEMINI_API_KEY=your_actual_api_key_here
 
-Open your terminal in the `ai_ASSistant` project folder and create an isolated Python environment.
+*Note: The `.env` and `.db` files are included in the `.gitignore` to prevent leaking API keys and personal memory databases to public repositories.*
 
-### Mac / Linux
+### 2. Build the Docker Image
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
+Open your terminal in the `ai_ASSistant` project folder and run the following command to build the container image:
 
-### Windows
+    docker build -t cortex-assistant .
 
-```bash
-python -m venv venv
-.\venv\Scripts\activate
-```
+### 3. Run the Assistant
 
----
+Run the container with volume mounts to ensure that the memory database and local file edits persist on your host machine.
 
-## 2️⃣ Install Dependencies
+**For Windows (PowerShell):**
+    docker run -d `
+      --name cortex-brain `
+      -p 8000:8000 `
+      --env-file .env `
+      -v ${PWD}:/app `
+      cortex-assistant
 
-With your virtual environment active, install the required libraries:
+**For Linux/macOS:**
+    docker run -d \
+      --name cortex-brain \
+      -p 8000:8000 \
+      --env-file .env \
+      -v ${PWD}:/app \
+      cortex-assistant
 
-```bash
-pip install google-genai python-dotenv
-```
+## Usage
 
----
+**Access the Chat Interface**
+Once the container is running, open a web browser and navigate to:
+`http://localhost:8000`
 
-## 3️⃣ Configure the Environment Variables
+**Monitor Internal Logs**
+To view the backend server logs, tool execution status, and the AI's internal reasoning, run the following command:
 
-Create a file named `.env` in the root of your project directory and add your Gemini API key:
+    docker logs -f cortex-brain
 
-```env
-GEMINI_API_KEY=your_actual_api_key_here
-```
-
----
-
-## 4️⃣ Setup the Core Files
-
-Ensure you have created the following files based on the project configuration:
-
-### 📜 `your_essence/SOUL.md`
-
-Contains:
-
-* System instructions
-* Core truths
-* Memory management rules (JSON format schema)
-
-### 🗄 `memory_manager.py`
-
-Handles:
-
-* SQLite database initialization (`init_db`)
-* Adding memory (`add_memory`)
-* Retrieving memory (`get_all_memories`)
-
-### 🧩 `main.py`
-
-The core application loop that:
-
-* Initializes the Gemini client
-* Injects stored memories into prompts
-* Uses regex to parse and save JSON memory blocks
-* Prevents memory JSON from being displayed to the user
-
----
-
-## ▶️ 5️⃣ Run the Assistant
-
-Make sure your virtual environment is active, then start the chat loop:
-
-```bash
-python main.py
-```
-
-On its very first run, the assistant will:
-
-1. Read its **Awakening Directive**
-2. Choose a name for itself
-3. Greet you
-4. Save its name to the persistent SQLite database
-
-Type `quit` or `exit` at any time to shut the assistant down.
+**Stopping and Starting**
+* To stop the assistant: `docker stop cortex-brain`
+* To wake it back up: `docker start cortex-brain`
