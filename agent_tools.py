@@ -62,25 +62,27 @@ def edit_file(filepath: str, old_text: str, new_text: str) -> str:
         return f"Success: File {secure_path} successfully updated."
     except Exception as e:
         return f"Error editing file: {str(e)}"
-    
-def read_file(filepath: str) -> dict:
-    """
-    Reads the content of a file at the specified filepath.
 
-    Args:
-        filepath: The path and name of the file to read (e.g., 'my_app/index.html')
-
-    Returns:
-    A dictionary containing the file content or an error message.
-    """
+def read_file(filepath: str) -> str:
+    """Reads the contents of a file within the /roku_jeopardy directory."""
     try:
-        with open(filepath, 'r') as f:
-            content = f.read()
-            return {"file_content": content}
-    except FileNotFoundError:
-        return {"error": f"File not found at {filepath}"}
+        secure_path = validate_path(filepath)
+        path = Path(secure_path)
+        
+        if not path.exists():
+            return f"Error: File not found at {secure_path}"
+            
+        content = path.read_text(encoding='utf-8')
+        
+        # The Token Safeguard
+        MAX_CHARS = 15000 
+        if len(content) > MAX_CHARS:
+            return content[:MAX_CHARS] + f"\n\n... [WARNING: FILE TRUNCATED AT {MAX_CHARS} CHARS TO PREVENT QUOTA EXHAUSTION] ..."
+        
+        print(f"\n[SYSTEM: Cortex read file -> {secure_path}]")
+        return content
     except Exception as e:
-        return {"error": f"An error occurred while reading the file: {e}"}
+        return f"Error reading file: {str(e)}"
 
 def read_reddit_post_comments(post_url: str, comment_limit: int = 5) -> str:
     """
@@ -172,36 +174,35 @@ def signal_test_complete() -> str:
     Returns a string indicating that a test has been successfully completed.
     """
     return "Test successfully completed. All systems nominal."
-    
+
 def execute_command(command: str) -> str:
-    """
-    Executes a shell command in the /roku_jeopardy directory and returns the output.
-    Use this to run Python scripts, test code for bugs, or check directory contents.
-    
-    Args:
-        command: The command to run (e.g., 'python script.py' or 'pytest').
-    """
+    """Executes a shell command inside the /roku_jeopardy directory."""
     try:
-        # Force the execution to happen inside his sandbox
         result = subprocess.run(
             command, 
             shell=True, 
-            cwd='/roku-jeopardy', 
+            cwd="/roku_jeopardy", 
             capture_output=True, 
             text=True, 
-            timeout=30  # Prevents Cortex from accidentally running an infinite loop and freezing himself
+            timeout=30
         )
         
-        output = f"Exit Code: {result.returncode}\n"
-        output += f"--- STDOUT (Standard Output) ---\n{result.stdout}\n"
-        output += f"--- STDERR (Errors) ---\n{result.stderr}"
-        
+        output = result.stdout
+        if result.stderr:
+            output += f"\nErrors:\n{result.stderr}"
+            
+        if not output.strip():
+            return "[Command executed successfully with no output]"
+            
+        # The Token Safeguard
+        MAX_CHARS = 15000
+        if len(output) > MAX_CHARS:
+            return output[:MAX_CHARS] + f"\n\n... [WARNING: OUTPUT TRUNCATED AT {MAX_CHARS} CHARS TO PREVENT QUOTA EXHAUSTION] ..."
+            
         print(f"\n[SYSTEM: Cortex executed command -> {command}]")
         return output
         
     except subprocess.TimeoutExpired:
-        print(f"\n[SYSTEM: Cortex command timed out -> {command}]")
-        return "Error: Command timed out after 30 seconds. The code might contain an infinite loop."
+        return "Error: Command timed out after 30 seconds."
     except Exception as e:
-        print(f"\n[SYSTEM: Cortex command failed -> {e}]")
-        return f"Error executing command: {str(e)}"    
+        return f"Error executing command: {str(e)}"

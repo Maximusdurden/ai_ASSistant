@@ -157,6 +157,10 @@ async def chat_endpoint(request: ChatRequest):
             else:
                 text_content = "[Action Executed Successfully but no text returned]"
 
+        # Ensure text_content is a valid string to prevent NoneType regex crashes
+        if not text_content:
+            text_content = "[Cortex executed tools but returned no conversational text.]"
+
         # Handle your custom memory extraction logic
         clean_text = extract_and_save_memory(text_content)
         print(f"Assistant: {clean_text}\n")
